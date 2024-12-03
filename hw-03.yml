@@ -1,0 +1,58 @@
+---
+- name: Configure app servers with Docker
+  hosts: app
+  become: true
+  tasks:
+    - name: Install Docker software
+      apt:
+        name: docker.io
+        state: present
+        update_cache: yes
+
+    - name: Start Docker container service
+      service:
+        name: docker
+        state: started
+        enabled: true
+
+- name: Set up PostgreSQL on database servers
+  hosts: database
+  become: true
+  vars:
+    postgres_version: "14"
+    postgres_data_dir: "/var/lib/postgresql/data"
+  tasks:
+    - name: Install PostgreSQL server version {{ postgres_version }}
+      apt:
+        name: "postgresql-{{ postgres_version }}"
+        state: present
+        update_cache: yes
+
+    - name: Ensure PostgreSQL data directory exists at {{ postgres_data_dir }}
+      file:
+        path: "{{ postgres_data_dir }}"
+        state: directory
+        owner: postgres
+        group: postgres
+        mode: '0755'
+
+    - name: Update PostgreSQL configuration to use custom data directory
+      lineinfile:
+        path: /etc/postgresql/{{ postgres_version }}/main/postgresql.conf
+        regexp: '^data_directory ='
+        line: "data_directory = '{{ postgres_data_dir }}'"
+        state: present
+        create: yes
+      notify: restart postgresql service
+
+    - name: Ensure PostgreSQL is running and enabled at startup
+      service:
+        name: postgresql
+        state: started
+        enabled: true
+
+  handlers:
+    - name: Restart PostgreSQL service to apply config changes
+      service:
+        name: postgresql
+        state: restarted
